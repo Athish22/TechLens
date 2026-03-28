@@ -1,0 +1,998 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TechLens — Offline Image Analyzer</title>
+<style>
+  :root {
+    --bg: #0b0b12; --surface: #11111c; --card: #171724; --border: #24243a;
+    --accent: #7c6aff; --accent2: #ff6a9b; --green: #4dffa0; --yellow: #ffb84d;
+    --text: #e8e8f5; --muted: #6b6b90;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: 'Segoe UI', system-ui, sans-serif; min-height: 100vh;
+    background-image: linear-gradient(rgba(124,106,255,.04) 1px,transparent 1px),linear-gradient(90deg,rgba(124,106,255,.04) 1px,transparent 1px);
+    background-size: 48px 48px;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 44px 20px 80px; }
+  .header { margin-bottom: 36px; }
+  .logo {
+    font-size: 28px; font-weight: 800; letter-spacing: -.5px;
+    background: linear-gradient(135deg,#7c6aff,#ff6a9b);
+    -webkit-background-clip: text; -webkit-text-fill-color: transparent; display: inline-block;
+  }
+  .logo-sub { font-family: monospace; font-size: 11px; color: var(--muted); letter-spacing: 2px; margin-left: 10px; vertical-align: middle; }
+  .tagline { font-family: monospace; font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .badge {
+    display: inline-flex; align-items: center; gap: 5px; border-radius: 20px;
+    font-family: monospace; font-size: 10px; padding: 3px 10px; margin-top: 8px; margin-right: 6px; letter-spacing: 1px;
+  }
+  .badge-green { background: rgba(77,255,160,.1); color: var(--green); border: 1px solid rgba(77,255,160,.25); }
+  .badge-purple { background: rgba(124,106,255,.1); color: var(--accent); border: 1px solid rgba(124,106,255,.25); }
+
+  #dropZone {
+    border: 1.5px dashed var(--border); border-radius: 16px; padding: 64px 24px;
+    text-align: center; cursor: pointer; background: var(--surface); transition: all .2s;
+  }
+  #dropZone:hover, #dropZone.over { border-color: var(--accent); background: rgba(124,106,255,.06); }
+  #dropZone input { display: none; }
+  .dz-icon {
+    width: 62px; height: 62px; margin: 0 auto 18px;
+    background: linear-gradient(135deg,rgba(124,106,255,.2),rgba(255,106,155,.15));
+    border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 28px;
+  }
+  #dropZone h2 { font-size: 18px; font-weight: 700; margin-bottom: 6px; }
+  #dropZone p { font-family: monospace; font-size: 12px; color: var(--muted); }
+
+  .main-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 24px; }
+  @media(max-width:700px){ .main-grid { grid-template-columns:1fr; } }
+
+  .panel { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+  .panel-head {
+    padding: 10px 14px; background: var(--card); border-bottom: 1px solid var(--border);
+    font-family: monospace; font-size: 11px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase;
+  }
+  #preview { width: 100%; max-height: 320px; object-fit: contain; display: block; background: #08080f; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 12px; padding: 10px 14px; background: var(--card); border-top: 1px solid var(--border); }
+  .meta-chip { font-family: monospace; font-size: 10px; color: var(--muted); }
+  .meta-chip b { color: var(--text); font-weight: 600; }
+  #histCanvas { width: 100%; height: 110px; display: block; background: #08080f; }
+
+  #analyzeBtn {
+    width: 100%; padding: 15px; background: linear-gradient(135deg,#7c6aff,#5e4fe0);
+    border: none; border-radius: 12px; color: #fff;
+    font-size: 15px; font-weight: 700; cursor: pointer; margin-top: 20px;
+    transition: all .2s; letter-spacing: .4px;
+  }
+  #analyzeBtn:hover { transform: translateY(-1px); box-shadow: 0 8px 28px rgba(124,106,255,.35); }
+  #analyzeBtn:disabled { opacity: .45; cursor: default; transform: none; box-shadow: none; }
+
+  .score-section { margin-top: 28px; }
+  .score-row { display: flex; align-items: center; gap: 14px; margin-bottom: 6px; }
+  .score-num { font-size: 42px; font-weight: 800; line-height: 1; }
+  .score-label { font-family: monospace; font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+  .score-bar-bg { height: 6px; background: var(--border); border-radius: 10px; overflow: hidden; }
+  .score-bar-fill { height: 100%; border-radius: 10px; transition: width .8s cubic-bezier(.4,0,.2,1); }
+
+  .metrics-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 16px; }
+  .metric-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .metric-name { font-family: monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 3px; }
+  .metric-value { font-size: 17px; font-weight: 800; }
+  .metric-sub { font-family: monospace; font-size: 9px; color: var(--muted); margin-top: 1px; }
+
+  #radarWrap { margin-top: 18px; background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+  #radarTitle { font-family: monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 10px; }
+  #radarCanvas { display: block; margin: 0 auto; }
+
+  .issues-section { margin-top: 28px; }
+  .section-title { font-size: 16px; font-weight: 800; margin-bottom: 14px; padding-bottom: 10px; border-bottom: 1px solid var(--border); }
+  .issue-card {
+    background: var(--card); border: 1px solid var(--border); border-radius: 11px;
+    margin-bottom: 10px; overflow: hidden;
+    animation: fadeUp .3s ease forwards; opacity: 0; transform: translateY(10px);
+  }
+  @keyframes fadeUp { to { opacity:1; transform:translateY(0); } }
+  .issue-head { display: flex; align-items: center; gap: 11px; padding: 12px 14px; cursor: pointer; }
+  .issue-icon { width: 34px; height: 34px; border-radius: 8px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .issue-meta { flex: 1; }
+  .issue-cat { font-family: monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 1px; }
+  .issue-title { font-size: 14px; font-weight: 700; }
+  .sev-pill { font-family: monospace; font-size: 10px; padding: 3px 9px; border-radius: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; flex-shrink: 0; }
+  .chev { color: var(--muted); font-size: 10px; transition: transform .2s; flex-shrink: 0; }
+  .issue-body { display: none; padding: 12px 14px 14px; border-top: 1px solid var(--border); background: rgba(255,255,255,.015); }
+  .issue-body.open { display: block; }
+  .issue-desc { font-size: 13px; line-height: 1.65; color: #b8b8cc; margin-bottom: 12px; }
+  .fix-box { background: rgba(124,106,255,.07); border: 1px solid rgba(124,106,255,.2); border-radius: 8px; padding: 10px 13px; }
+  .fix-lbl { font-family: monospace; font-size: 9px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent); margin-bottom: 5px; }
+  .fix-txt { font-size: 12px; line-height: 1.6; color: #c8c8e0; }
+  .algo-tag {
+    display: inline-block; font-family: monospace; font-size: 9px; padding: 2px 7px;
+    border-radius: 10px; background: rgba(124,106,255,.12); color: var(--accent);
+    border: 1px solid rgba(124,106,255,.2); margin-bottom: 8px; letter-spacing: .5px;
+  }
+
+  .summary-box {
+    background: linear-gradient(135deg,rgba(124,106,255,.08),rgba(255,106,155,.05));
+    border: 1px solid rgba(124,106,255,.2); border-radius: 12px; padding: 18px; margin-bottom: 20px;
+  }
+  .summary-lbl { font-family: monospace; font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--accent); margin-bottom: 7px; }
+  .summary-txt { font-size: 13px; line-height: 1.7; color: #b8b8cc; }
+
+  #resetBtn {
+    background: none; border: 1px solid var(--border); color: var(--muted);
+    font-family: monospace; font-size: 11px; padding: 7px 14px;
+    border-radius: 8px; cursor: pointer; transition: all .2s;
+  }
+  #resetBtn:hover { border-color: var(--accent2); color: var(--accent2); }
+  .hidden { display: none !important; }
+  .progress-wrap { margin-top: 16px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 18px; }
+  .progress-label { font-family: monospace; font-size: 12px; color: var(--accent); margin-bottom: 10px; }
+  .progress-bg { height: 4px; background: var(--border); border-radius: 10px; overflow: hidden; }
+  .progress-fill { height: 100%; background: linear-gradient(90deg,#7c6aff,#ff6a9b); border-radius: 10px; transition: width .4s ease; }
+
+  /* ── Tooltip ── */
+  #tooltip {
+    position: fixed; z-index: 9999; pointer-events: none;
+    max-width: 260px; padding: 11px 14px;
+    background: #1e1e2e; border: 1px solid rgba(124,106,255,.35);
+    border-radius: 10px; box-shadow: 0 8px 32px rgba(0,0,0,.55);
+    opacity: 0; transform: translateY(4px);
+    transition: opacity .15s ease, transform .15s ease;
+  }
+  #tooltip.show { opacity: 1; transform: translateY(0); }
+  #tooltip .tt-title {
+    font-family: monospace; font-size: 10px; text-transform: uppercase;
+    letter-spacing: 1.5px; color: var(--accent); margin-bottom: 5px; font-weight: 700;
+  }
+  #tooltip .tt-body { font-size: 12px; line-height: 1.6; color: #b8b8cc; }
+  #tooltip .tt-range {
+    margin-top: 8px; display: flex; gap: 4px; flex-wrap: wrap;
+  }
+  #tooltip .tt-tag {
+    font-family: monospace; font-size: 10px; padding: 2px 7px; border-radius: 8px;
+    background: rgba(255,255,255,.06); color: var(--muted); border: 1px solid var(--border);
+  }
+  #tooltip .tt-tag.good  { background: rgba(77,255,160,.1);  color: var(--green); border-color: rgba(77,255,160,.25); }
+  #tooltip .tt-tag.warn  { background: rgba(255,184,77,.1);  color: var(--yellow); border-color: rgba(255,184,77,.25); }
+  #tooltip .tt-tag.bad   { background: rgba(255,106,155,.1); color: var(--accent2); border-color: rgba(255,106,155,.25); }
+
+  /* hover hint on anything with data-tip */
+  [data-tip] { cursor: help; }
+  .metric-card[data-tip] { cursor: help; transition: border-color .15s; }
+  .metric-card[data-tip]:hover { border-color: rgba(124,106,255,.5); }
+</style>
+</head>
+<body>
+<canvas id="workCanvas" style="display:none"></canvas>
+<div id="tooltip"><div class="tt-title" id="ttTitle"></div><div class="tt-body" id="ttBody"></div><div class="tt-range" id="ttRange"></div></div>
+<div class="wrap">
+  <div class="header">
+    <div><span class="logo">TechLens</span><span class="logo-sub">// offline v2</span></div>
+    <div class="tagline">→ 100% local · no API · no internet · 14 analysis algorithms</div>
+    <div>
+      <span class="badge badge-green">⚡ OFFLINE</span>
+      <span class="badge badge-purple">🔬 14 ALGORITHMS</span>
+    </div>
+  </div>
+
+  <div id="dropZone">
+    <input type="file" id="fileInput" accept="image/*">
+    <div class="dz-icon">🔬</div>
+    <h2>Drop your image here</h2>
+    <p>or click to browse · PNG, JPG, WEBP, TIFF · fully offline</p>
+  </div>
+
+  <div id="mainContent" class="hidden">
+    <div style="display:flex;justify-content:flex-end;margin-top:16px;">
+      <button id="resetBtn">↺ New image</button>
+    </div>
+    <div class="main-grid">
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="panel">
+          <div class="panel-head">Preview</div>
+          <img id="preview" src="" alt="">
+          <div class="meta-row" id="metaRow"></div>
+        </div>
+        <div class="panel">
+          <div class="panel-head">RGB Histogram</div>
+          <canvas id="histCanvas"></canvas>
+        </div>
+      </div>
+      <div>
+        <button id="analyzeBtn">⚡ Run Technical Analysis</button>
+        <div id="progressWrap" class="progress-wrap hidden">
+          <div class="progress-label" id="progressLabel">Analyzing…</div>
+          <div class="progress-bg"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+        </div>
+        <div id="scoreSection" class="score-section hidden">
+          <div class="score-row">
+            <div class="score-num" id="scoreNum" data-tip="total-score" style="cursor:help">—</div>
+            <div>
+              <div style="font-size:16px;font-weight:700;">Technical Score</div>
+              <div class="score-label" id="scoreTag">—</div>
+            </div>
+          </div>
+          <div class="score-bar-bg" data-tip="total-score" style="cursor:help"><div class="score-bar-fill" id="scoreBarFill" style="width:0%"></div></div>
+          <div class="metrics-grid" id="metricsGrid"></div>
+          <div id="radarWrap">
+            <div id="radarTitle">Quality Radar — 8 Dimensions</div>
+            <canvas id="radarCanvas" width="230" height="230" data-tip="total-score" style="cursor:help"></canvas>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="resultsSection" class="hidden">
+      <div class="summary-box">
+        <div class="summary-lbl">Overall Assessment</div>
+        <div class="summary-txt" id="summaryTxt"></div>
+      </div>
+      <div class="issues-section">
+        <div class="section-title">Issues Found</div>
+        <div id="issueList"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let pixels = null, W = 0, H = 0;
+
+// ── LOAD ────────────────────────────────────
+const dz = $('dropZone');
+dz.addEventListener('click', () => $('fileInput').click());
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('over'); });
+dz.addEventListener('dragleave', () => dz.classList.remove('over'));
+dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('over'); loadFile(e.dataTransfer.files[0]); });
+$('fileInput').addEventListener('change', e => loadFile(e.target.files[0]));
+
+function loadFile(f) {
+  if (!f || !f.type.startsWith('image/')) return;
+  const url = URL.createObjectURL(f);
+  const img = new Image();
+  img.onload = () => {
+    $('preview').src = url;
+    $('preview').onload = () => buildMeta(f, img);
+    $('mainContent').classList.remove('hidden');
+    dz.classList.add('hidden');
+    $('scoreSection').classList.add('hidden');
+    $('resultsSection').classList.add('hidden');
+    $('progressWrap').classList.add('hidden');
+    $('analyzeBtn').disabled = false;
+    extractPixels(img);
+    drawHistogram();
+  };
+  img.src = url;
+}
+
+function buildMeta(f, img) {
+  const g = gcd(img.naturalWidth, img.naturalHeight);
+  const chips = [
+    ['FILE', f.name.length > 22 ? f.name.slice(0,20)+'…' : f.name],
+    ['SIZE', fmtBytes(f.size)],
+    ['DIMS', img.naturalWidth+'×'+img.naturalHeight+'px'],
+    ['TYPE', f.type.replace('image/','').toUpperCase()],
+    ['MP',   ((img.naturalWidth*img.naturalHeight)/1e6).toFixed(2)+' MP'],
+    ['AR',   (img.naturalWidth/g)+':'+(img.naturalHeight/g)]
+  ];
+  $('metaRow').innerHTML = chips.map(([k,v]) => `<div class="meta-chip">${k} <b>${v}</b></div>`).join('');
+}
+
+function extractPixels(img) {
+  const c = $('workCanvas');
+  W = img.naturalWidth; H = img.naturalHeight;
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.drawImage(img, 0, 0);
+  pixels = ctx.getImageData(0, 0, W, H).data;
+}
+
+function drawHistogram() {
+  if (!pixels) return;
+  const canvas = $('histCanvas');
+  canvas.width = canvas.offsetWidth || 420; canvas.height = 110;
+  const ctx = canvas.getContext('2d');
+  const bR = new Uint32Array(256), bG = new Uint32Array(256), bB = new Uint32Array(256);
+  for (let i = 0; i < pixels.length; i+=4) { bR[pixels[i]]++; bG[pixels[i+1]]++; bB[pixels[i+2]]++; }
+  const mx = Math.max(...bR, ...bG, ...bB);
+  const cw = canvas.width, ch = canvas.height - 4;
+  ctx.fillStyle = '#08080f'; ctx.fillRect(0,0,cw,canvas.height);
+  [[bR,'#ff4466'],[bG,'#44ff88'],[bB,'#4488ff']].forEach(([b,col]) => {
+    ctx.globalAlpha = 0.55; ctx.fillStyle = col;
+    for (let i=0;i<256;i++) { const x=(i/255)*cw, h=(b[i]/mx)*ch; ctx.fillRect(x,ch-h+4,cw/256+1,h); }
+  });
+  ctx.globalAlpha = 1;
+}
+
+// ── MAIN ANALYSIS ───────────────────────────
+$('analyzeBtn').addEventListener('click', runAnalysis);
+
+async function runAnalysis() {
+  if (!pixels) return;
+  $('analyzeBtn').disabled = true;
+  $('progressWrap').classList.remove('hidden');
+  $('scoreSection').classList.add('hidden');
+  $('resultsSection').classList.add('hidden');
+  $('issueList').innerHTML = '';
+
+  await prog('Computing luminance statistics…', 7);   const lum   = computeLuminance();
+  await prog('Analyzing exposure & clipping…', 14);   const exp   = analyzeExposure(lum);
+  await prog('Measuring sharpness…', 21);             const sharp = analyzeSharpness();
+  await prog('Estimating noise floor…', 29);          const noise = analyzeNoise();
+  await prog('Evaluating color balance…', 36);        const color = analyzeColor();
+  await prog('Checking dynamic range…', 43);          const dr    = analyzeDynamicRange(lum);
+  await prog('Detecting compression artifacts…', 50); const comp  = analyzeCompression();
+  await prog('Measuring chromatic aberration…', 57);  const ca    = analyzeChromaticAberration();
+  await prog('Detecting vignetting…', 63);            const vig   = analyzeVignetting(lum);
+  await prog('Detecting banding & posterization…', 69); const band = analyzeBanding(lum);
+  await prog('Scanning for dead/hot pixels…', 75);   const dead  = analyzeDeadPixels();
+  await prog('Estimating lens distortion…', 81);      const dist  = analyzeLensDistortion();
+  await prog('Checking per-channel clipping…', 87);  const clip  = analyzeChannelClipping();
+  await prog('Analyzing local contrast…', 93);        const lc    = analyzeLocalContrast();
+  await prog('Building report…', 100);
+
+  const issues = buildIssues(exp, sharp, noise, color, dr, comp, ca, vig, band, dead, dist, clip, lc);
+  const score  = computeScore(issues);
+  const radar  = buildRadarScores(exp, sharp, noise, color, dr, comp, ca, vig, band, lc);
+  await sleep(180);
+  renderScore(score, issues, lum, exp, sharp, noise, color, dr, radar);
+  renderIssues(issues);
+  $('progressWrap').classList.add('hidden');
+  $('analyzeBtn').disabled = false;
+}
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+async function prog(msg, pct) { $('progressLabel').textContent = msg; $('progressFill').style.width = pct+'%'; await sleep(25); }
+
+// ════════════════════════════════════════════════
+//  ORIGINAL 7 ALGORITHMS
+// ════════════════════════════════════════════════
+
+function computeLuminance() {
+  const n = pixels.length/4, lum = new Float32Array(n);
+  for (let i=0;i<n;i++) lum[i] = 0.2126*pixels[i*4] + 0.7152*pixels[i*4+1] + 0.0722*pixels[i*4+2];
+  return lum;
+}
+
+function analyzeExposure(lum) {
+  const n = lum.length; let sum=0,blown=0,crushed=0;
+  for (let i=0;i<n;i++) { sum+=lum[i]; if(lum[i]>245)blown++; if(lum[i]<10)crushed++; }
+  const mean=sum/n; let v=0;
+  for (let i=0;i<n;i++) v+=(lum[i]-mean)**2;
+  return { mean, std:Math.sqrt(v/n), blownPct:(blown/n)*100, crushedPct:(crushed/n)*100 };
+}
+
+function analyzeSharpness() {
+  const c=$('workCanvas'),ctx=c.getContext('2d');
+  const sw=Math.min(W,512),sh=Math.min(H,512);
+  const d=ctx.getImageData(Math.floor((W-sw)/2),Math.floor((H-sh)/2),sw,sh).data;
+  const g=new Float32Array(sw*sh);
+  for(let i=0;i<sw*sh;i++) g[i]=0.299*d[i*4]+0.587*d[i*4+1]+0.114*d[i*4+2];
+  let s=0,n=0;
+  for(let y=1;y<sh-1;y++) for(let x=1;x<sw-1;x++) {
+    const i=y*sw+x;
+    s+=Math.abs(-g[i-sw-1]-g[i-sw]-g[i-sw+1]-g[i-1]+8*g[i]-g[i+1]-g[i+sw-1]-g[i+sw]-g[i+sw+1]); n++;
+  }
+  return { lapMean: s/n };
+}
+
+function analyzeNoise() {
+  const c=$('workCanvas'),ctx=c.getContext('2d');
+  const sw=Math.min(W,256),sh=Math.min(H,256);
+  const d=ctx.getImageData(0,0,sw,sh).data;
+  let nR=0,nG=0,nB=0,cnt=0;
+  for(let y=1;y<sh-1;y++) for(let x=1;x<sw-1;x++) {
+    const i=(y*sw+x)*4,iU=((y-1)*sw+x)*4,iD=((y+1)*sw+x)*4,iL=(y*sw+x-1)*4,iRR=(y*sw+x+1)*4;
+    nR+=Math.abs(d[i]  -(d[iU]  +d[iD]  +d[iL]  +d[iRR]  )/4);
+    nG+=Math.abs(d[i+1]-(d[iU+1]+d[iD+1]+d[iL+1]+d[iRR+1])/4);
+    nB+=Math.abs(d[i+2]-(d[iU+2]+d[iD+2]+d[iL+2]+d[iRR+2])/4);
+    cnt++;
+  }
+  return { r:nR/cnt, g:nG/cnt, b:nB/cnt, total:(nR+nG+nB)/(cnt*3) };
+}
+
+function analyzeColor() {
+  const n=pixels.length/4; let sR=0,sG=0,sB=0,satSum=0;
+  for(let i=0;i<n;i++) {
+    const r=pixels[i*4],g=pixels[i*4+1],b=pixels[i*4+2];
+    sR+=r; sG+=g; sB+=b;
+    const mx=Math.max(r,g,b),mn=Math.min(r,g,b);
+    if(mx>0) satSum+=(mx-mn)/mx;
+  }
+  const mR=sR/n,mG=sG/n,mB=sB/n,neu=(mR+mG+mB)/3;
+  const cast=Math.max(Math.abs(mR-neu),Math.abs(mG-neu),Math.abs(mB-neu));
+  const ch=Math.abs(mR-neu)>Math.abs(mG-neu)?(Math.abs(mR-neu)>Math.abs(mB-neu)?'Red':'Blue'):(Math.abs(mG-neu)>Math.abs(mB-neu)?'Green':'Blue');
+  return { meanR:mR, meanG:mG, meanB:mB, castPct:(cast/neu)*100, castChannel:ch, avgSat:satSum/n };
+}
+
+function analyzeDynamicRange(lum) {
+  const s=[...lum].sort((a,b)=>a-b), n=s.length;
+  const hist=new Uint32Array(256);
+  lum.forEach(v=>hist[Math.min(255,Math.floor(v))]++);
+  let ent=0; hist.forEach(h=>{ if(h>0){const p=h/n; ent-=p*Math.log2(p);} });
+  return { p1:s[Math.floor(n*.01)], p99:s[Math.floor(n*.99)], entropy:ent };
+}
+
+function analyzeCompression() {
+  const c=$('workCanvas'),ctx=c.getContext('2d');
+  const sw=Math.min(W,512),sh=Math.min(H,512);
+  const d=ctx.getImageData(0,0,sw,sh).data;
+  let bd=0,id=0;
+  for(let y=0;y<sh-1;y++) for(let x=0;x<sw-1;x++) {
+    const i=(y*sw+x)*4,iR=(y*sw+x+1)*4,iD=((y+1)*sw+x)*4;
+    const dH=Math.abs(d[i]-d[iR])+Math.abs(d[i+1]-d[iR+1])+Math.abs(d[i+2]-d[iR+2]);
+    const dV=Math.abs(d[i]-d[iD])+Math.abs(d[i+1]-d[iD+1])+Math.abs(d[i+2]-d[iD+2]);
+    if(x%8===7) bd+=dH+dV; else id+=dH+dV;
+  }
+  return { blockRatio: bd/(id||1) };
+}
+
+function analyzeChromaticAberration() {
+  const c=$('workCanvas'),ctx=c.getContext('2d');
+  const sw=Math.min(W,400),sh=Math.min(H,400);
+  const d=ctx.getImageData(Math.floor((W-sw)/2),Math.floor((H-sh)/2),sw,sh).data;
+  let ca=0,cnt=0;
+  for(let y=1;y<sh-1;y++) for(let x=1;x<sw-1;x++) {
+    const i=(y*sw+x)*4,iL=(y*sw+x-1)*4,iR2=(y*sw+x+1)*4,iU=((y-1)*sw+x)*4,iD2=((y+1)*sw+x)*4;
+    const e=Math.abs(d[i]-d[iL])+Math.abs(d[i]-d[iR2])+Math.abs(d[i]-d[iU])+Math.abs(d[i]-d[iD2]);
+    if(e>60){ ca+=(Math.abs(d[i]-d[i+2])+Math.abs(d[i]-d[i+1]))/2; cnt++; }
+  }
+  return { caScore: cnt>0 ? ca/cnt : 0 };
+}
+
+// ════════════════════════════════════════════════
+//  NEW 7 ALGORITHMS
+// ════════════════════════════════════════════════
+
+// 1. VIGNETTING — corner vs centre brightness falloff
+function analyzeVignetting(lum) {
+  const zs = Math.floor(Math.min(W,H)*0.12);
+  const zone = (xs,ys,xe,ye) => { let s=0,n=0; for(let y=ys;y<ye;y++) for(let x=xs;x<xe;x++){s+=lum[y*W+x];n++;} return n?s/n:0; };
+  const cx=Math.floor(W/2)-zs, cy=Math.floor(H/2)-zs;
+  const centre = zone(cx,cy,cx+zs*2,cy+zs*2);
+  const corners = [zone(0,0,zs,zs), zone(W-zs,0,W,zs), zone(0,H-zs,zs,H), zone(W-zs,H-zs,W,H)];
+  const cornerAvg = corners.reduce((a,b)=>a+b,0)/4;
+  const falloff = centre>0 ? ((centre-cornerAvg)/centre)*100 : 0;
+  const asymmetry = centre>0 ? ((Math.max(...corners)-Math.min(...corners))/centre)*100 : 0;
+  return { falloff, asymmetry, centre, cornerAvg };
+}
+
+// 2. BANDING & POSTERIZATION — step jumps in smooth gradient areas
+function analyzeBanding(lum) {
+  const stepY=Math.max(1,Math.floor(H/300)), stepX=Math.max(1,Math.floor(W/600));
+  let bandCount=0, smoothRuns=0;
+  for(let y=0;y<H;y+=stepY) {
+    const run=[];
+    for(let x=0;x<W-stepX;x+=stepX) run.push(Math.abs(lum[y*W+x]-lum[y*W+x+stepX]));
+    if(run.length>10) {
+      const sorted=[...run].sort((a,b)=>a-b), med=sorted[Math.floor(sorted.length/2)];
+      if(med<3){ smoothRuns++; run.forEach(d=>{ if(d>8) bandCount++; }); }
+    }
+  }
+  const unique=new Set(); for(let i=0;i<lum.length;i+=4) unique.add(Math.floor(lum[i]));
+  return { bandRatio: smoothRuns>0?bandCount/smoothRuns:0, uniqueLevels:unique.size };
+}
+
+// 3. DEAD/HOT PIXELS — isolated outlier pixels vs all 4 neighbors
+function analyzeDeadPixels() {
+  const c=$('workCanvas'),ctx=c.getContext('2d');
+  const sw=Math.min(W,1024),sh=Math.min(H,1024);
+  const d=ctx.getImageData(0,0,sw,sh).data;
+  let dead=0,hot=0;
+  for(let y=1;y<sh-1;y++) for(let x=1;x<sw-1;x++) {
+    const i=(y*sw+x)*4, iU=((y-1)*sw+x)*4, iD=((y+1)*sw+x)*4, iL=(y*sw+x-1)*4, iRR=(y*sw+x+1)*4;
+    const lc=(d[i]+d[i+1]+d[i+2])/3;
+    const na=((d[iU]+d[iU+1]+d[iU+2])/3+(d[iD]+d[iD+1]+d[iD+2])/3+(d[iL]+d[iL+1]+d[iL+2])/3+(d[iRR]+d[iRR+1]+d[iRR+2])/3)/4;
+    if(lc<15&&na>80) dead++;
+    if(lc>240&&na<175) hot++;
+  }
+  const total=sw*sh;
+  return { deadCount:dead, hotCount:hot, deadPpm:(dead/total)*1e6, hotPpm:(hot/total)*1e6 };
+}
+
+// 4. LENS DISTORTION — horizontal edge straightness
+function analyzeLensDistortion() {
+  const c=$('workCanvas'),ctx=c.getContext('2d');
+  const sw=Math.min(W,512),sh=Math.min(H,512);
+  const d=ctx.getImageData(0,0,sw,sh).data;
+  const g=new Float32Array(sw*sh);
+  for(let i=0;i<sw*sh;i++) g[i]=(d[i*4]+d[i*4+1]+d[i*4+2])/3;
+  let curveScore=0, samples=0;
+  const bandH=Math.floor(sh/6);
+  for(let band=0;band<2;band++) {
+    const yS=band===0?2:sh-bandH-2, yE=band===0?bandH+2:sh-2;
+    for(let y=yS;y<yE-1;y++) {
+      let edgeRow=[];
+      for(let x=2;x<sw-2;x++) if(Math.abs(g[y*sw+x]-g[(y+1)*sw+x])>30) edgeRow.push(x);
+      if(edgeRow.length>10){ curveScore+=Math.abs(edgeRow[Math.floor(edgeRow.length/2)]-sw/2)/sw; samples++; }
+    }
+  }
+  return { distortionIndex: samples>0?(curveScore/samples)*100:0 };
+}
+
+// 5. PER-CHANNEL CLIPPING — R/G/B independently
+function analyzeChannelClipping() {
+  const n=pixels.length/4; let cR=0,cG=0,cB=0;
+  for(let i=0;i<n;i++) { if(pixels[i*4]>252)cR++; if(pixels[i*4+1]>252)cG++; if(pixels[i*4+2]>252)cB++; }
+  const maxCh=cR>cG&&cR>cB?'Red':cG>cB?'Green':'Blue';
+  return { rPct:(cR/n)*100, gPct:(cG/n)*100, bPct:(cB/n)*100, maxCh };
+}
+
+// 6. LOCAL CONTRAST (micro-contrast) — median tile variance
+function analyzeLocalContrast() {
+  const c=$('workCanvas'),ctx=c.getContext('2d');
+  const sw=Math.min(W,512),sh=Math.min(H,512);
+  const d=ctx.getImageData(0,0,sw,sh).data;
+  const g=new Float32Array(sw*sh);
+  for(let i=0;i<sw*sh;i++) g[i]=(d[i*4]+d[i*4+1]+d[i*4+2])/3;
+  const ts=32; let vars=[],flat=0,high=0;
+  for(let ty=0;ty<sh-ts;ty+=ts) for(let tx=0;tx<sw-ts;tx+=ts) {
+    let s=0,n=0;
+    for(let y=ty;y<ty+ts;y++) for(let x=tx;x<tx+ts;x++){s+=g[y*sw+x];n++;}
+    const mean=s/n; let v=0;
+    for(let y=ty;y<ty+ts;y++) for(let x=tx;x<tx+ts;x++) v+=(g[y*sw+x]-mean)**2;
+    const variance=v/n; vars.push(variance);
+    if(variance<20) flat++; if(variance>800) high++;
+  }
+  vars.sort((a,b)=>a-b);
+  return { medianVariance:vars[Math.floor(vars.length/2)]||0, flatTiles:flat, highTiles:high, totalTiles:vars.length };
+}
+
+// ════════════════════════════════════════════════
+//  BUILD ISSUES
+// ════════════════════════════════════════════════
+function buildIssues(exp, sharp, noise, color, dr, comp, ca, vig, band, dead, dist, clip, lc) {
+  const I = [];
+  const add = (obj) => I.push(obj);
+
+  // EXPOSURE
+  if(exp.blownPct>3) add({ category:'Exposure', icon:'☀️', algo:'Luminance Histogram',
+    severity:exp.blownPct>15?'High':exp.blownPct>5?'Medium':'Low',
+    title:`Highlight Clipping (${exp.blownPct.toFixed(1)}% blown)`,
+    description:`${exp.blownPct.toFixed(2)}% of pixels ≥ 245/255. Blown areas contain no recoverable detail.`,
+    fix:`Reduce exposure ${exp.blownPct>10?'1–2 stops':'0.5–1 stop'}. In RAW use highlight recovery. Pull down top of Curves tonal range.`
+  });
+  if(exp.crushedPct>3) add({ category:'Exposure', icon:'🌑', algo:'Luminance Histogram',
+    severity:exp.crushedPct>15?'High':exp.crushedPct>5?'Medium':'Low',
+    title:`Shadow Clipping (${exp.crushedPct.toFixed(1)}% crushed)`,
+    description:`${exp.crushedPct.toFixed(2)}% of pixels ≤ 10/255. Shadow detail is permanently lost.`,
+    fix:`Raise blacks/shadows slider. Use ETTR technique when shooting. Lift bottom of Curves.`
+  });
+  if(exp.mean<60) add({ category:'Exposure', icon:'🔅', algo:'Mean Luminance',
+    severity:exp.mean<35?'High':'Medium',
+    title:`Underexposure (mean: ${exp.mean.toFixed(0)}/255)`,
+    description:`Average luminance ${exp.mean.toFixed(1)} is far below midpoint 128. Dark images amplify noise and reduce detail.`,
+    fix:`Increase exposure ~${((128-exp.mean)/60).toFixed(1)} stops. Lift midpoint in Curves/Levels.`
+  });
+  else if(exp.mean>200) add({ category:'Exposure', icon:'🔆', algo:'Mean Luminance',
+    severity:exp.mean>225?'High':'Medium',
+    title:`Overexposure (mean: ${exp.mean.toFixed(0)}/255)`,
+    description:`Average luminance ${exp.mean.toFixed(1)} is near maximum. Widespread clipping risk.`,
+    fix:`Reduce exposure ~${((exp.mean-128)/60).toFixed(1)} stops. Apply S-curve or reduce highlights.`
+  });
+
+  // SHARPNESS
+  const lap=sharp.lapMean;
+  if(lap<4) add({ category:'Sharpness', icon:'🔭', algo:'Laplacian Variance',
+    severity:lap<1.5?'High':'Medium',
+    title:`Significant Blur (Laplacian: ${lap.toFixed(2)})`,
+    description:`Edge variance of ${lap.toFixed(3)} indicates heavy blur — camera shake, motion, or severe defocus.`,
+    fix:`Unsharp Mask (80–120%, Radius 0.8–1.2px). Smart Sharpen with motion detection. Extreme blur cannot be fully recovered.`
+  });
+  else if(lap<12) add({ category:'Sharpness', icon:'🔭', algo:'Laplacian Variance',
+    severity:'Low', title:`Mild Softness (Laplacian: ${lap.toFixed(2)})`,
+    description:`Score ${lap.toFixed(2)} suggests slight softness — diffraction, slight defocus, or lens at wide aperture.`,
+    fix:`Unsharp Mask Amount 60%, Radius 1.0px. Or High Pass sharpening at 1–2px in Overlay blend mode.`
+  });
+  else if(lap>80) add({ category:'Sharpness', icon:'⚡', algo:'Laplacian Variance',
+    severity:'Medium', title:`Over-sharpening Detected (Laplacian: ${lap.toFixed(2)})`,
+    description:`Very high edge contrast (${lap.toFixed(2)}) suggests aggressive sharpening applied — likely halo artifacts at edges.`,
+    fix:`Reduce sharpening amount. Use Masking slider to restrict to real edges. Reduce Clarity if applied globally.`
+  });
+
+  // NOISE
+  if(noise.total>6) {
+    const chroma=Math.abs(noise.r-noise.g)+Math.abs(noise.g-noise.b);
+    const nt=chroma>2?'Chrominance':'Luminance';
+    add({ category:'Noise', icon:'📡', algo:'Local Residual Analysis',
+      severity:noise.total>12?'High':noise.total>8?'Medium':'Low',
+      title:`${nt} Noise (residual: ${noise.total.toFixed(2)})`,
+      description:`Channel residuals R:${noise.r.toFixed(2)} G:${noise.g.toFixed(2)} B:${noise.b.toFixed(2)}. ${nt==='Chrominance'?'Color noise = colored speckling, more visible than luminance noise.':'Luminance noise = fine grain texture.'}`,
+      fix:`${nt==='Chrominance'?'Color NR 40–60 in Lightroom. Topaz DeNoise AI for heavy noise.':'Luminance NR 20–50 (Detail 50, Contrast 20). Use masking to preserve texture.'}`
+    });
+  }
+
+  // COLOR
+  if(color.castPct>8) add({ category:'Color', icon:'🎨', algo:'Grey World Algorithm',
+    severity:color.castPct>20?'High':color.castPct>12?'Medium':'Low',
+    title:`Color Cast: ${color.castChannel} (+${color.castPct.toFixed(1)}%)`,
+    description:`Channel averages R:${color.meanR.toFixed(0)} G:${color.meanG.toFixed(0)} B:${color.meanB.toFixed(0)}. ${color.castChannel} channel deviates ${color.castPct.toFixed(1)}% from neutral grey.`,
+    fix:`Adjust WB${color.castChannel==='Red'?' toward cool/blue':color.castChannel==='Blue'?' toward warm':' tint slider'}. Click neutral grey for auto correction. Fine-tune with Curves.`
+  });
+  if(color.avgSat<0.08) add({ category:'Color', icon:'🩶', algo:'HSV Saturation',
+    severity:'Low', title:`Low Saturation (${(color.avgSat*100).toFixed(1)}%)`,
+    description:`Average saturation ${(color.avgSat*100).toFixed(1)}% — image appears washed out or desaturated.`,
+    fix:`Increase Vibrance (+15–30) and Saturation (+5–15). Use HSL panel for targeted boosts.`
+  });
+  else if(color.avgSat>0.65) add({ category:'Color', icon:'🌈', algo:'HSV Saturation',
+    severity:'Medium', title:`Oversaturation (${(color.avgSat*100).toFixed(1)}%)`,
+    description:`Average saturation ${(color.avgSat*100).toFixed(1)}% risks color clipping and detail loss in saturated areas.`,
+    fix:`Reduce global saturation –10 to –25. Use HSL panel. Check out-of-gamut warnings before export.`
+  });
+
+  // DYNAMIC RANGE
+  if(dr.entropy<5.5) add({ category:'Dynamic Range', icon:'📊', algo:'Histogram Entropy',
+    severity:dr.entropy<4?'High':'Medium',
+    title:`Narrow Tonal Range (entropy: ${dr.entropy.toFixed(2)} bits)`,
+    description:`Entropy ${dr.entropy.toFixed(2)} bits (max ~8) — tones clustered in narrow band. Flat, foggy, or over-processed.`,
+    fix:`Stretch histogram in Levels. Apply gentle S-curve to separate midtones from shadows and highlights.`
+  });
+
+  // COMPRESSION
+  if(comp.blockRatio>1.6) add({ category:'Compression', icon:'🗜️', algo:'Block Boundary Analysis',
+    severity:comp.blockRatio>2.5?'High':comp.blockRatio>2?'Medium':'Low',
+    title:`JPEG Block Artifacts (ratio: ${comp.blockRatio.toFixed(2)})`,
+    description:`Block boundary ratio ${comp.blockRatio.toFixed(2)} — 8×8 DCT artifacts visible. Appears as grid pattern in smooth areas.`,
+    fix:`Re-export at JPEG Q 90+. Use deblocking filter in Camera Raw. Convert to PNG/TIFF for lossless storage.`
+  });
+
+  // CHROMATIC ABERRATION
+  if(ca.caScore>12) add({ category:'Lens Artifacts', icon:'🔬', algo:'Edge Channel Analysis',
+    severity:ca.caScore>25?'High':ca.caScore>18?'Medium':'Low',
+    title:`Chromatic Aberration (CA: ${ca.caScore.toFixed(1)})`,
+    description:`Channel misalignment score ${ca.caScore.toFixed(1)} at high-contrast edges — red/cyan or green/magenta fringing.`,
+    fix:`Lens Correction → CA in Lightroom. Defringe tool for manual correction. Reduce lens aperture for less CA.`
+  });
+
+  // ── NEW ──
+
+  // VIGNETTING
+  if(vig.falloff>15) add({ category:'Lens Artifacts', icon:'🔲', algo:'Corner Brightness Falloff',
+    severity:vig.falloff>35?'High':vig.falloff>22?'Medium':'Low',
+    title:`Vignetting (${vig.falloff.toFixed(1)}% corner falloff)`,
+    description:`Corner brightness is ${vig.falloff.toFixed(1)}% lower than centre (centre: ${vig.centre.toFixed(0)}, corners: ${vig.cornerAvg.toFixed(0)}). ${vig.asymmetry>8?`Asymmetric vignette detected (${vig.asymmetry.toFixed(1)}% spread) — possible directional light or lens decentering.`:'Vignette appears symmetric.'}`,
+    fix:`Enable Lens Profile in Lightroom (Lens Corrections → Enable Profile). Manual: radial gradient on corners, boost exposure +${Math.round(vig.falloff/15)} stop. Heavy vignette: Post-Crop Vignetting slider.`
+  });
+
+  // BANDING
+  if(band.bandRatio>2) add({ category:'Tone Rendering', icon:'〰️', algo:'Gradient Banding Detection',
+    severity:band.bandRatio>6?'High':band.bandRatio>3.5?'Medium':'Low',
+    title:`Gradient Banding (index: ${band.bandRatio.toFixed(1)})`,
+    description:`Step-like transitions in smooth gradient areas (banding index: ${band.bandRatio.toFixed(2)}). Caused by 8-bit depth limits, aggressive tone curves, or lossy compression. Unique luminance levels: ${band.uniqueLevels}.`,
+    fix:`Export in 16-bit to prevent banding. Add subtle dithering noise (~0.5–1% Gaussian) to gradients. Avoid strong S-curves in 8-bit. Convert to 16-bit before heavy tonal adjustments.`
+  });
+  if(band.uniqueLevels<80) add({ category:'Tone Rendering', icon:'🎞️', algo:'Posterization Analysis',
+    severity:band.uniqueLevels<40?'High':'Medium',
+    title:`Posterization (${band.uniqueLevels} unique luminance levels)`,
+    description:`Only ${band.uniqueLevels} distinct luminance levels detected — normal images have 200+. Severe bit-depth reduction or heavy filtering detected.`,
+    fix:`Work in 16-bit. Avoid repeated JPEG saves. Add noise/grain for smoother transitions. Re-export from 16-bit source if available.`
+  });
+
+  // DEAD/HOT PIXELS
+  if(dead.deadPpm>5||dead.hotPpm>5) add({ category:'Sensor', icon:'💀', algo:'Isolated Pixel Detection',
+    severity:(dead.deadCount+dead.hotCount)>50?'High':(dead.deadCount+dead.hotCount)>15?'Medium':'Low',
+    title:`${dead.deadCount} Dead / ${dead.hotCount} Hot Pixels (${(dead.deadPpm+dead.hotPpm).toFixed(1)} PPM)`,
+    description:`Dead pixels: ${dead.deadCount} isolated black cells. Hot pixels: ${dead.hotCount} isolated bright cells (${(dead.deadPpm+dead.hotPpm).toFixed(1)} per million). Hot pixels are common in long exposures.`,
+    fix:`Camera: run pixel mapping (sensor cleaning menu). Software: Lightroom Spot Removal or Photoshop Dust & Scratches. Long exposures: enable in-camera Long Exposure NR.`
+  });
+
+  // LENS DISTORTION
+  if(dist.distortionIndex>3) add({ category:'Lens Artifacts', icon:'🌀', algo:'Edge Straightness Analysis',
+    severity:dist.distortionIndex>8?'High':dist.distortionIndex>5?'Medium':'Low',
+    title:`Lens Distortion (index: ${dist.distortionIndex.toFixed(2)})`,
+    description:`Edge curvature analysis gives distortion index ${dist.distortionIndex.toFixed(2)}. Barrel distortion (wide-angle): edges bow outward. Pincushion (telephoto): edges bow inward.`,
+    fix:`Enable Lens Profile Correction in Lightroom/Camera Raw. Manual: Lens Corrections → Distortion slider. PTLens or DxO Optics Module for precise correction.`
+  });
+
+  // CHANNEL CLIPPING
+  const worstClip=Math.max(clip.rPct,clip.gPct,clip.bPct);
+  if(worstClip>5 && !(exp.blownPct>3)) add({ category:'Exposure', icon:'🌡️', algo:'Per-Channel Clipping',
+    severity:worstClip>20?'High':worstClip>10?'Medium':'Low',
+    title:`Channel Clipping — ${clip.maxCh} (${worstClip.toFixed(1)}%)`,
+    description:`Individual channel clip: R:${clip.rPct.toFixed(1)}% G:${clip.gPct.toFixed(1)}% B:${clip.bPct.toFixed(1)}%. Single-channel clipping causes colour shifts even where overall luminance looks normal — e.g. clipped red channel turns saturated reds to flat pink.`,
+    fix:`In Curves, switch to individual R/G/B channel view and pull down the clipped channel. Reduce saturation of the clipping hue in HSL. Enable Channel Clipping warnings in your RAW processor.`
+  });
+
+  // LOCAL CONTRAST
+  if(lc.medianVariance<15&&lc.totalTiles>10) add({ category:'Micro-Contrast', icon:'🔍', algo:'Tile Variance Analysis',
+    severity:lc.medianVariance<5?'High':'Low',
+    title:`Low Local Contrast (tile variance: ${lc.medianVariance.toFixed(1)})`,
+    description:`Median 32×32 tile variance ${lc.medianVariance.toFixed(1)} — ${lc.flatTiles}/${lc.totalTiles} tiles are flat. Hazy, foggy appearance with poor micro-detail.`,
+    fix:`Increase Clarity (+15–35) and Texture (+20–40) in Lightroom. High Pass filter (1–2px) in Overlay blend at 30–50% opacity for local contrast boost.`
+  });
+
+  const ord={High:0,Medium:1,Low:2};
+  return I.sort((a,b)=>ord[a.severity]-ord[b.severity]);
+}
+
+// ── RADAR ───────────────────────────────────
+function buildRadarScores(exp, sharp, noise, color, dr, comp, ca, vig, band, lc) {
+  const cl=(v,lo,hi)=>Math.max(lo,Math.min(hi,v));
+  return [
+    {label:'Exposure',  score:cl(100-exp.blownPct*3-exp.crushedPct*2-Math.abs(exp.mean-128)/2,0,100)},
+    {label:'Sharpness', score:cl(sharp.lapMean>80?60:sharp.lapMean<1?5:Math.min(sharp.lapMean*4,100),0,100)},
+    {label:'Noise',     score:cl(100-noise.total*6,0,100)},
+    {label:'Color',     score:cl(100-color.castPct*2,0,100)},
+    {label:'D-Range',   score:cl((dr.entropy/8)*100,0,100)},
+    {label:'Vignette',  score:cl(100-vig.falloff*1.5,0,100)},
+    {label:'Artifacts', score:cl(100-comp.blockRatio*20-ca.caScore*2,0,100)},
+    {label:'L-Contrast',score:cl(Math.min(lc.medianVariance*2,100),0,100)},
+  ];
+}
+
+// ── SCORE ───────────────────────────────────
+function computeScore(issues) {
+  let p=0; issues.forEach(i=>p+=({High:16,Medium:7,Low:2.5}[i.severity]||0));
+  return Math.max(0,Math.min(100,Math.round(100-p)));
+}
+
+// ── RENDER SCORE ────────────────────────────
+function renderScore(score, issues, lum, exp, sharp, noise, color, dr, radar) {
+  const col=score>=75?'#4dffa0':score>=45?'#ffb84d':'#ff6a9b';
+  $('scoreNum').textContent=score; $('scoreNum').style.color=col;
+  $('scoreTag').textContent=score>=80?'EXCELLENT':score>=65?'GOOD':score>=45?'FAIR':'NEEDS WORK';
+  $('scoreBarFill').style.width=score+'%';
+  $('scoreBarFill').style.background=`linear-gradient(90deg,${col},${col}aa)`;
+  $('scoreSection').classList.remove('hidden');
+
+  const hi=issues.filter(i=>i.severity==='High').length, me=issues.filter(i=>i.severity==='Medium').length;
+  const sp=[];
+  if(exp.mean<60)sp.push('underexposed');else if(exp.mean>200)sp.push('overexposed');else sp.push('well-exposed');
+  if(sharp.lapMean<4)sp.push('heavily blurred');else if(sharp.lapMean<12)sp.push('slightly soft');else sp.push('sharp');
+  if(noise.total>8)sp.push('noisy');else sp.push('clean');
+  $('summaryTxt').textContent=`This image is ${sp.join(', ')}. Score: ${score}/100. Found ${issues.length} issue${issues.length!==1?'s':''}`+(hi>0?` including ${hi} high-severity`:'')+(me>0?(hi>0?` and ${me} medium`:` including ${me} medium`):'')+'.';
+
+  const metrics=[
+    {name:'Mean Lum',  value:exp.mean.toFixed(0),      sub:'/255',     col:exp.mean>60&&exp.mean<200?'#4dffa0':'#ffb84d', tip:'mean-lum'},
+    {name:'Sharpness', value:sharp.lapMean.toFixed(1), sub:'laplacian',col:sharp.lapMean>12?'#4dffa0':sharp.lapMean>4?'#ffb84d':'#ff6a9b', tip:'sharpness'},
+    {name:'Noise',     value:noise.total.toFixed(2),   sub:'residual', col:noise.total<4?'#4dffa0':noise.total<8?'#ffb84d':'#ff6a9b', tip:'noise'},
+    {name:'Blown %',   value:exp.blownPct.toFixed(1),  sub:'%',        col:exp.blownPct<1?'#4dffa0':exp.blownPct<5?'#ffb84d':'#ff6a9b', tip:'blown'},
+    {name:'DR Entropy',value:dr.entropy.toFixed(2),    sub:'bits',     col:dr.entropy>6?'#4dffa0':dr.entropy>5?'#ffb84d':'#ff6a9b', tip:'entropy'},
+    {name:'Color Cast',value:color.castPct.toFixed(1), sub:'%',        col:color.castPct<5?'#4dffa0':color.castPct<12?'#ffb84d':'#ff6a9b', tip:'color-cast'},
+    {name:'Vignette',  value:radar[5].score.toFixed(0),sub:'score',    col:radar[5].score>70?'#4dffa0':radar[5].score>45?'#ffb84d':'#ff6a9b', tip:'vignette'},
+    {name:'L-Contrast',value:radar[7].score.toFixed(0),sub:'score',    col:radar[7].score>50?'#4dffa0':radar[7].score>25?'#ffb84d':'#ff6a9b', tip:'local-contrast'},
+    {name:'Artifacts', value:radar[6].score.toFixed(0),sub:'score',    col:radar[6].score>70?'#4dffa0':radar[6].score>45?'#ffb84d':'#ff6a9b', tip:'artifacts'},
+  ];
+  $('metricsGrid').innerHTML=metrics.map(m=>`<div class="metric-card" data-tip="${m.tip}">
+    <div class="metric-name">${m.name} <span style="color:rgba(124,106,255,.5);font-size:9px">?</span></div>
+    <div class="metric-value" style="color:${m.col}">${m.value}</div>
+    <div class="metric-sub">${m.sub}</div></div>`).join('');
+  drawRadar(radar);
+}
+
+// ── RADAR CHART ─────────────────────────────
+function drawRadar(axes) {
+  const cv=$('radarCanvas'),ctx=cv.getContext('2d');
+  const CW=cv.width,CH=cv.height,cx=CW/2,cy=CH/2,R=Math.min(cx,cy)-32;
+  ctx.clearRect(0,0,CW,CH);
+  const n=axes.length, step=Math.PI*2/n, ang=i=>i*step-Math.PI/2;
+  const pt=(i,r)=>[cx+r*Math.cos(ang(i)), cy+r*Math.sin(ang(i))];
+  [.25,.5,.75,1].forEach(f=>{
+    ctx.beginPath();
+    for(let i=0;i<n;i++){const[x,y]=pt(i,R*f);i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);}
+    ctx.closePath();
+    ctx.strokeStyle=f===1?'rgba(124,106,255,.3)':'rgba(255,255,255,.06)'; ctx.lineWidth=1; ctx.stroke();
+  });
+  for(let i=0;i<n;i++){const[x,y]=pt(i,R); ctx.beginPath();ctx.moveTo(cx,cy);ctx.lineTo(x,y);ctx.strokeStyle='rgba(255,255,255,.07)';ctx.lineWidth=1;ctx.stroke();}
+  ctx.beginPath();
+  axes.forEach((a,i)=>{const[x,y]=pt(i,R*(a.score/100));i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);});
+  ctx.closePath(); ctx.fillStyle='rgba(124,106,255,.2)'; ctx.fill(); ctx.strokeStyle='#7c6aff'; ctx.lineWidth=1.5; ctx.stroke();
+  axes.forEach((a,i)=>{
+    const[x,y]=pt(i,R*(a.score/100));
+    ctx.beginPath();ctx.arc(x,y,3.5,0,Math.PI*2);
+    ctx.fillStyle=a.score>=70?'#4dffa0':a.score>=40?'#ffb84d':'#ff6a9b'; ctx.fill();
+  });
+  // Draw labels in canvas (plain text)
+  ctx.font='bold 9px monospace'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  axes.forEach((a,i)=>{const[x,y]=pt(i,R+20); ctx.fillStyle='#6b6b90'; ctx.fillText(a.label.toUpperCase(),x,y);});
+
+  // Overlay transparent tooltip hotspots as absolutely-positioned spans
+  const wrap = $('radarWrap');
+  wrap.querySelectorAll('.radar-label-tip').forEach(el=>el.remove());
+  const canvasRect = cv.getBoundingClientRect();
+  const wrapRect   = wrap.getBoundingClientRect();
+  axes.forEach((a,i)=>{
+    const[lx,ly]=pt(i,R+20);
+    const tipKey = 'radar-'+a.label.toLowerCase().replace(/[^a-z]/g,'-');
+    const span = document.createElement('span');
+    span.className='radar-label-tip';
+    span.dataset.tip = tipKey;
+    Object.assign(span.style,{
+      position:'absolute', width:'52px', height:'18px',
+      left:(lx-26)+'px', top:(ly-9)+'px',
+      cursor:'help', zIndex:'10',
+      borderRadius:'4px',
+    });
+    wrap.appendChild(span);
+  });
+  // Make radarWrap position:relative so absolute children work
+  wrap.style.position='relative';
+}
+
+// ── RENDER ISSUES ───────────────────────────
+function renderIssues(issues) {
+  $('resultsSection').classList.remove('hidden');
+  if(!issues.length){$('issueList').innerHTML=`<div style="text-align:center;padding:30px;color:var(--muted);font-family:monospace;font-size:13px;">✅ No significant issues found. Image quality is excellent.</div>`;return;}
+  const sc={High:{bg:'rgba(255,106,155,.13)',col:'#ff6a9b',bd:'rgba(255,106,155,.3)'},Medium:{bg:'rgba(255,184,77,.13)',col:'#ffb84d',bd:'rgba(255,184,77,.3)'},Low:{bg:'rgba(77,255,160,.1)',col:'#4dffa0',bd:'rgba(77,255,160,.25)'}};
+  $('issueList').innerHTML=issues.map((iss,idx)=>{
+    const s=sc[iss.severity]||sc.Low;
+    return `<div class="issue-card" style="animation-delay:${idx*55}ms">
+      <div class="issue-head" onclick="toggleIssue(this)">
+        <div class="issue-icon" style="background:${s.bg}">${iss.icon}</div>
+        <div class="issue-meta">
+          <div class="issue-cat">${iss.category}</div>
+          <div class="issue-title">${iss.title}</div>
+        </div>
+        <div class="sev-pill" data-tip="sev-${iss.severity.toLowerCase()}" style="background:${s.bg};color:${s.col};border:1px solid ${s.bd}">${iss.severity}</div>
+        <div class="chev">▼</div>
+      </div>
+      <div class="issue-body">
+        <div class="algo-tag" data-tip="algo-${iss.algo.toLowerCase().replace(/[^a-z]/g,'-')}">⚙ ${iss.algo}</div>
+        <div class="issue-desc">${iss.description}</div>
+        <div class="fix-box"><div class="fix-lbl">💡 Fix</div><div class="fix-txt">${iss.fix}</div></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function toggleIssue(head) {
+  const chev=head.querySelector('.chev'), body=head.nextElementSibling;
+  const open=body.classList.toggle('open');
+  chev.style.transform=open?'rotate(180deg)':'';
+  head.style.borderBottom=open?'1px solid var(--border)':'none';
+}
+
+$('resetBtn').addEventListener('click',()=>{
+  $('mainContent').classList.add('hidden'); dz.classList.remove('hidden');
+  $('fileInput').value=''; pixels=null;
+});
+
+const fmtBytes=b=>b<1024?b+' B':b<1048576?(b/1024).toFixed(1)+' KB':(b/1048576).toFixed(1)+' MB';
+const gcd=(a,b)=>b===0?a:gcd(b,a%b);
+window.addEventListener('resize', drawHistogram);
+
+// ════════════════════════════════════════════
+//  TOOLTIP ENGINE
+// ════════════════════════════════════════════
+const TIPS = {
+  // ── Metric cards ──
+  'mean-lum': {
+    title: 'Mean Luminance',
+    body: 'The average brightness of all pixels, measured 0–255. Computed using perceptual weights (R×0.21 + G×0.72 + B×0.07) matching how the human eye perceives brightness.',
+    ranges: [{label:'< 60: Underexposed',cls:'bad'},{label:'60–200: Good',cls:'good'},{label:'> 200: Overexposed',cls:'bad'}]
+  },
+  'sharpness': {
+    title: 'Laplacian Variance',
+    body: 'Measures edge sharpness by convolving the image with a 3×3 Laplacian kernel, which amplifies rapid brightness changes. High variance = lots of sharp edges. Low variance = soft or blurry. Sampled from a central 512×512 region.',
+    ranges: [{label:'< 4: Blurry',cls:'bad'},{label:'4–12: Soft',cls:'warn'},{label:'12–80: Sharp',cls:'good'},{label:'> 80: Over-sharpened',cls:'warn'}]
+  },
+  'noise': {
+    title: 'Local Residual Noise',
+    body: 'For each pixel, the average of its 4 direct neighbors is subtracted. The absolute difference is the "residual" — signal that cannot be explained by local context. True noise shows up as high residuals even in smooth areas.',
+    ranges: [{label:'< 4: Clean',cls:'good'},{label:'4–8: Acceptable',cls:'warn'},{label:'> 8: Noisy',cls:'bad'}]
+  },
+  'blown': {
+    title: 'Blown Highlights %',
+    body: 'Percentage of pixels with luminance ≥ 245/255. These pixels are fully saturated to white — all tonal information is permanently lost and cannot be recovered in post-processing.',
+    ranges: [{label:'< 1%: Excellent',cls:'good'},{label:'1–5%: Minor',cls:'warn'},{label:'> 5%: Significant clipping',cls:'bad'}]
+  },
+  'entropy': {
+    title: 'Histogram Entropy',
+    body: 'Shannon entropy of the luminance histogram, measured in bits (max ~8 bits). High entropy = tones spread evenly across the full range. Low entropy = tones clustered in a narrow band — a flat, foggy, or compressed tonal range.',
+    ranges: [{label:'< 4 bits: Very flat',cls:'bad'},{label:'4–5.5 bits: Narrow range',cls:'warn'},{label:'> 6 bits: Healthy',cls:'good'}]
+  },
+  'color-cast': {
+    title: 'Color Cast (Grey World)',
+    body: 'Based on the Grey World assumption: in a neutral image, the average of R, G, and B channels should be equal. The deviation of the dominant channel from this neutral point is expressed as a percentage.',
+    ranges: [{label:'< 5%: Neutral',cls:'good'},{label:'5–12%: Mild cast',cls:'warn'},{label:'> 12%: Strong cast',cls:'bad'}]
+  },
+  'vignette': {
+    title: 'Vignetting Score',
+    body: 'Compares the average luminance of 12% corner zones against the central zone. Score of 100 = no falloff. Derived from: (1 − corner_falloff_pct / 100) × 100. Asymmetric vignettes may indicate lens decentering.',
+    ranges: [{label:'> 70: Minimal vignette',cls:'good'},{label:'45–70: Moderate',cls:'warn'},{label:'< 45: Heavy vignette',cls:'bad'}]
+  },
+  'local-contrast': {
+    title: 'Local Contrast Score',
+    body: 'The image is divided into 32×32 pixel tiles. Each tile\'s brightness variance is measured. The median tile variance is used — high values = good micro-detail and texture. Low values = hazy, flat appearance. Score is capped at 100.',
+    ranges: [{label:'> 50: Good micro-detail',cls:'good'},{label:'25–50: Moderate flatness',cls:'warn'},{label:'< 25: Very flat/hazy',cls:'bad'}]
+  },
+  'artifacts': {
+    title: 'Artifact-Free Score',
+    body: 'Composite score combining JPEG block artifact ratio (8×8 DCT boundary strength) and chromatic aberration level. Score of 100 = no detectable compression or CA artifacts. Penalized by block ratio × 20 and CA score × 2.',
+    ranges: [{label:'> 70: Clean',cls:'good'},{label:'45–70: Some artifacts',cls:'warn'},{label:'< 45: Heavy artifacts',cls:'bad'}]
+  },
+
+  // ── Radar axes ──
+  'radar-exposure':   { title:'Radar: Exposure', body:'Combined exposure score accounting for blown highlights (×3 penalty), crushed shadows (×2), and deviation of mean luminance from the 128 midpoint.', ranges:[] },
+  'radar-sharpness':  { title:'Radar: Sharpness', body:'Derived from the Laplacian variance score. Scores above 80 are penalised for over-sharpening. Linear from 0–80 capped at 100.', ranges:[] },
+  'radar-noise':      { title:'Radar: Noise', body:'Noise score = 100 − (total_residual × 6). A residual of 0 gives 100; a residual of 16+ gives 0.', ranges:[] },
+  'radar-color':      { title:'Radar: Color Balance', body:'Color cast score = 100 − (castPct × 2). A 50% cast deviation gives a score of 0. Perfect neutral balance gives 100.', ranges:[] },
+  'radar-d-range':    { title:'Radar: Dynamic Range', body:'Histogram entropy normalized to a 0–100 scale: (entropy / 8) × 100. Max possible entropy is ~8 bits for a fully spread histogram.', ranges:[] },
+  'radar-vignette':   { title:'Radar: Vignette', body:'Score = 100 − (falloff% × 1.5). A 67% corner falloff gives a score of 0. No falloff = 100.', ranges:[] },
+  'radar-artifacts':  { title:'Radar: Artifacts', body:'Combined: 100 − (block_ratio × 20) − (CA_score × 2). Penalises both JPEG compression blocks and chromatic aberration simultaneously.', ranges:[] },
+  'radar-l-contrast': { title:'Radar: Local Contrast', body:'Median tile variance mapped to 0–100 (capped). Measures texture richness and micro-detail across the image.', ranges:[] },
+
+  // ── Algorithm tags ──
+  'algo-luminance-histogram':      { title:'Algorithm: Luminance Histogram', body:'Builds a 256-bin frequency map of pixel brightness. Blown = bins 245–255. Crushed = bins 0–10. Mean and standard deviation characterize overall exposure.', ranges:[] },
+  'algo-mean-luminance':           { title:'Algorithm: Mean Luminance', body:'Sum of all perceptual luma values (0.2126R + 0.7152G + 0.0722B) divided by pixel count. Uses ITU-R BT.709 coefficients matching human visual sensitivity.', ranges:[] },
+  'algo-laplacian-variance':       { title:'Algorithm: Laplacian Variance', body:'Applies a 3×3 Laplacian kernel (center weight 8, surrounding −1) to a grayscale version of the image. Accumulates absolute response values. High response = high-frequency edge energy = sharpness.', ranges:[] },
+  'algo-local-residual-analysis':  { title:'Algorithm: Local Residual Analysis', body:'For each pixel, computes the absolute difference between its value and the mean of its 4 cardinal neighbors (up, down, left, right). Averaged per channel across a 256×256 sample. Residuals above smooth signal = noise.', ranges:[] },
+  'algo-grey-world-algorithm':     { title:'Algorithm: Grey World Algorithm', body:'Assumes neutral images have equal R/G/B channel means. Computes the per-channel mean, finds the neutral point as their average, then measures how far the dominant channel deviates. Cast % = max_deviation / neutral × 100.', ranges:[] },
+  'algo-hsv-saturation':           { title:'Algorithm: HSV Saturation', body:'For each RGB pixel, computes saturation as (max − min) / max in the HSV colour model. Averaged across all pixels. Values near 0 = greyscale/desaturated. Values near 1 = fully vivid colours.', ranges:[] },
+  'algo-histogram-entropy':        { title:'Algorithm: Histogram Entropy', body:'Shannon information entropy: H = −Σ p(i) × log₂(p(i)) summed over all 256 luminance bins. A flat histogram (all bins equal) has maximum entropy ~8 bits. A spike (all pixels same brightness) has entropy 0.', ranges:[] },
+  'algo-block-boundary-analysis':  { title:'Algorithm: Block Boundary Analysis', body:'Measures pixel-difference magnitude at x-positions that are multiples of 8 (JPEG DCT block edges) vs. all other positions. Block ratio = boundary_diff / inner_diff. Ratios above 1.5 indicate visible JPEG blocking.', ranges:[] },
+  'algo-edge-channel-analysis':    { title:'Algorithm: Edge Channel Analysis', body:'Finds high-contrast edges (edge magnitude > 60) using cardinal neighbor differences. At each edge pixel, measures the R−B and R−G channel splits. High per-edge R/G/B divergence = fringing / chromatic aberration.', ranges:[] },
+  'algo-corner-brightness-falloff':{ title:'Algorithm: Corner Brightness Falloff', body:'Samples the average luminance in 12% corner zones (top-left, top-right, bottom-left, bottom-right) and the central 24%×24% zone. Falloff % = (centre − corner_avg) / centre × 100. Asymmetry = (max_corner − min_corner) / centre × 100.', ranges:[] },
+  'algo-gradient-banding-detection':{ title:'Algorithm: Gradient Banding Detection', body:'Scans horizontal pixel runs. In runs where the median step-difference is < 3 (smooth gradients), counts abrupt jumps > 8. Banding ratio = abrupt_jumps / smooth_run_count. Higher values mean more banding in smooth areas.', ranges:[] },
+  'algo-posterization-analysis':   { title:'Algorithm: Posterization Analysis', body:'Counts the number of distinct integer luminance levels (0–255) present in the image. A full-tonal image has 200+ levels. Heavy filtering, quantization, or bit-depth reduction produces very few unique levels.', ranges:[] },
+  'algo-isolated-pixel-detection': { title:'Algorithm: Isolated Pixel Detection', body:'For each pixel, compares its luminance to the average of its 4 neighbors. If the pixel is near-black (< 15) while neighbors are bright (> 80) → dead pixel. If near-white (> 240) while neighbors are dark (< 175) → hot pixel. Reported per million (PPM).', ranges:[] },
+  'algo-edge-straightness-analysis':{ title:'Algorithm: Edge Straightness Analysis', body:'Detects strong vertical edges (>30 luma difference between adjacent rows) in the top and bottom bands of the image. Measures how far the midpoint of each edge run deviates from the horizontal image centre. Deviation normalized to image width × 100.', ranges:[] },
+  'algo-per-channel-clipping':     { title:'Algorithm: Per-Channel Clipping', body:'Independently counts pixels where R, G, or B channel value exceeds 252. Single-channel clipping causes hue shifts even when luminance is not blown — e.g. a clipped red channel turns vivid reds into flat pink.', ranges:[] },
+  'algo-tile-variance-analysis':   { title:'Algorithm: Tile Variance Analysis', body:'Divides the image into 32×32 pixel tiles. For each tile, computes brightness variance (mean squared deviation from the tile mean). The median of all tile variances represents typical local contrast. Tiles with variance < 20 are considered flat.', ranges:[] },
+
+  // ── Severity pills ──
+  'sev-high':   { title:'Severity: High', body:'This issue significantly degrades technical image quality and is likely visible to the naked eye. Should be addressed before using the image professionally.', ranges:[] },
+  'sev-medium': { title:'Severity: Medium', body:'This issue has a moderate impact. It may be noticeable at full resolution or in critical use cases such as print or large-format display.', ranges:[] },
+  'sev-low':    { title:'Severity: Low', body:'A minor technical imperfection. Unlikely to be noticeable in typical viewing conditions, but worth noting for high-quality or archival work.', ranges:[] },
+
+  // ── Histogram ──
+  'histogram': { title:'RGB Histogram', body:'Shows the frequency distribution of Red, Green, and Blue channel values across all 256 brightness levels. Left = dark tones, Right = highlights. Stacking of all 3 channels to the far right = blown highlights.', ranges:[{label:'Left spike: underexposed',cls:'warn'},{label:'Right spike: overexposed',cls:'warn'},{label:'Balanced spread: good',cls:'good'}] },
+
+  // ── Score bar ──
+  'total-score': { title:'Technical Quality Score', body:'A composite 0–100 score computed by subtracting weighted penalties for each detected issue. High severity issues deduct 16 points each, Medium deduct 7, Low deduct 2.5. A score of 80+ indicates a technically excellent image.', ranges:[{label:'80–100: Excellent',cls:'good'},{label:'65–79: Good',cls:'good'},{label:'45–64: Fair',cls:'warn'},{label:'0–44: Needs work',cls:'bad'}] },
+};
+
+// ── Tooltip DOM logic ──
+const ttEl   = $('tooltip');
+const ttTitle= $('ttTitle');
+const ttBody = $('ttBody');
+const ttRange= $('ttRange');
+let ttTimer  = null;
+
+function showTip(key, e) {
+  const data = TIPS[key];
+  if (!data) return;
+  ttTitle.textContent = data.title;
+  ttBody.textContent  = data.body;
+  ttRange.innerHTML   = (data.ranges||[]).map(r=>`<span class="tt-tag ${r.cls||''}">${r.label}</span>`).join('');
+  ttEl.classList.add('show');
+  moveTip(e);
+}
+
+function moveTip(e) {
+  const pad = 14, tw = ttEl.offsetWidth || 260, th = ttEl.offsetHeight || 100;
+  let x = e.clientX + pad, y = e.clientY + pad;
+  if (x + tw > window.innerWidth  - 8) x = e.clientX - tw - pad;
+  if (y + th > window.innerHeight - 8) y = e.clientY - th - pad;
+  ttEl.style.left = x + 'px';
+  ttEl.style.top  = y + 'px';
+}
+
+function hideTip() { ttEl.classList.remove('show'); }
+
+// Delegate all tooltip events from the document
+document.addEventListener('mouseover', e => {
+  const el = e.target.closest('[data-tip]');
+  if (!el) return;
+  clearTimeout(ttTimer);
+  ttTimer = setTimeout(() => showTip(el.dataset.tip, e), 80);
+});
+document.addEventListener('mousemove', e => {
+  if (ttEl.classList.contains('show')) moveTip(e);
+});
+document.addEventListener('mouseout', e => {
+  const el = e.target.closest('[data-tip]');
+  if (el) { clearTimeout(ttTimer); hideTip(); }
+});
+
+// Add data-tip to histogram panel head and score number after DOM is ready
+document.querySelector('#histCanvas') && (() => {
+  document.querySelector('#histCanvas').setAttribute('data-tip','histogram');
+  document.querySelector('#histCanvas').style.cursor = 'help';
+})();
+</script>
+</body>
+</html>
